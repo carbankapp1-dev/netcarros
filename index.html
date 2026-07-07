@@ -58,6 +58,13 @@ header #header-date{font-size:12px;color:rgba(255,255,255,.55);display:block}
 /* ── MAIN ── */
 main{padding:24px 28px;max-width:1700px;margin:0 auto}
 .upload-panel{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+.upload-bar{display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid var(--gray-200);border-radius:10px;padding:10px 16px;flex-wrap:wrap;margin-bottom:14px;}
+.upload-bar-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.upload-bar-label{font-size:13px;font-weight:700;color:var(--gray-700);}
+.upload-bar-btn{background:#e8f5ee;color:var(--green-dark);border:1px solid #b7dfca;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;}
+.upload-bar-btn:hover{background:#d1f0e0;}
+.upload-bar-status{font-size:12px;color:var(--green-dark);font-weight:600;}
+.upload-bar-divider{width:1px;height:28px;background:var(--gray-200);margin:0 4px;}
 .upload-card{background:var(--white);border-radius:var(--radius);border:2px dashed var(--gray-200);padding:18px 22px;cursor:pointer;transition:all .2s;position:relative;}
 .upload-card:hover,.upload-card.active{border-color:var(--green-main);background:var(--green-light)}
 .upload-card input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
@@ -342,29 +349,28 @@ tr.row-paid td span{color:#fff!important;}
 <main>
   <div class="upload-panel" id="upload-panel">
 
-    <!-- LINHA 1: Upload de arquivos (lado a lado) — só admin -->
-    <div class="admin-only" id="card-lojas" style="display:none;" onclick="document.getElementById('file-lojas').click()">
+    <!-- Barra compacta de upload — só admin -->
+    <div class="admin-only upload-bar" id="upload-bar" style="display:none;">
       <input type="file" id="file-lojas" accept=".xlsx,.xls,.csv" onchange="App.handleUploadLojas(event)" style="display:none">
-      <span class="upload-icon">🏪</span>
-      <h3>Lojas &amp; Colaboradores</h3>
-      <p>Planilha com DN, Loja, GCM e Coordenador</p>
-      <span class="file-hint">.xlsx · .xls · .csv</span>
-      <div class="upload-status" id="status-lojas"></div>
-    </div>
-
-    <div class="admin-only" id="card-propostas" style="display:none;" onclick="document.getElementById('file-propostas').click()">
       <input type="file" id="file-propostas" accept=".xlsx,.xls,.csv" onchange="App.handleUploadPropostas(event)" style="display:none">
-      <span class="upload-icon">📄</span>
-      <h3>Relatório de Propostas</h3>
-      <p>CSV/Excel exportado do sistema de propostas</p>
-      <span class="file-hint">.csv · .xlsx · .xls</span>
-      <div class="upload-status" id="status-propostas"></div>
-      <div id="ultima-atualizacao" style="margin-top:6px;font-size:11px;color:var(--gray-500);"></div>
-    </div>
 
-    <!-- Botões modelo -->
-    <button onclick="App.baixarModeloLojas()" class="admin-only" style="display:none;background:#e8f5ee;color:var(--green-dark);border:1px solid #b7dfca;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">📥 Modelo: Lojas &amp; Colaboradores</button>
-    <button onclick="App.baixarModeloPropostas()" class="admin-only" style="display:none;background:#e8f5ee;color:var(--green-dark);border:1px solid #b7dfca;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">📥 Modelo: Relatório de Propostas</button>
+      <div class="upload-bar-group">
+        <span class="upload-bar-label">🏪 Lojas</span>
+        <button class="upload-bar-btn" onclick="document.getElementById('file-lojas').click()">📂 Upload</button>
+        <button class="upload-bar-btn" onclick="App.baixarModeloLojas()">📥 Modelo</button>
+        <span class="upload-bar-status" id="status-lojas"></span>
+      </div>
+
+      <div class="upload-bar-divider"></div>
+
+      <div class="upload-bar-group">
+        <span class="upload-bar-label">📄 Propostas</span>
+        <button class="upload-bar-btn" onclick="document.getElementById('file-propostas').click()">📂 Upload</button>
+        <button class="upload-bar-btn" onclick="App.baixarModeloPropostas()">📥 Modelo</button>
+        <span class="upload-bar-status" id="status-propostas"></span>
+        <span id="ultima-atualizacao" style="font-size:11px;color:var(--gray-500);"></span>
+      </div>
+    </div>
 
     <!-- LINHA 2: Ações — ocultas -->
     <div class="upload-card upload-action" onclick="App.recarregarBanco()" style="display:none!important;">
@@ -625,7 +631,13 @@ const Auth = (() => {
     // Upload de lojas só para executivo
     const isGestor=['executivo'].includes(_user.role);
     if(isGestor){
-      document.querySelectorAll('.admin-only').forEach(el=>el.style.display='block');
+      document.querySelectorAll('.admin-only').forEach(el=>{
+        if(el.classList.contains('upload-bar')){
+          el.style.display='flex';
+        } else {
+          el.style.display='block';
+        }
+      });
     }
     App.init(_user);
   }
