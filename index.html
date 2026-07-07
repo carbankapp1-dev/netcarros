@@ -810,7 +810,7 @@ const App = (() => {
           STATUS:       r.status||'',      _obs:r.observacao||'',
           _pgto:        r.pgto||false,     _sb_id:r.id,
           _updated_at:  r.updated_at||'',
-        }));
+        })).sort((a,b)=>new Date(b.DATA_INCLUSAO||0)-new Date(a.DATA_INCLUSAO||0));
         localStorage.setItem('propostas_data',JSON.stringify(propostas));
         if(el)el.textContent=`✅ ${propostas.length} propostas`;
         const maisRecente=propostas.map(r=>r._updated_at).filter(Boolean).sort().pop();
@@ -892,18 +892,16 @@ const App = (() => {
   async function handleUploadPropostas(event){
     const file=event.target.files[0]; if(!file)return;
     const el=document.getElementById('status-propostas');
-    document.getElementById('card-propostas').classList.add('active');
     el.textContent='⏳ Processando...';
     try{
-      // Garante que as lojas estão carregadas antes de enriquecer
       if(Object.keys(lojas).length===0){
-        el.textContent='⏳ Carregando lojas do banco...';
+        el.textContent='⏳ Carregando lojas...';
         await _carregarLojasDoBanco();
       }
       const rows=await _readFile(file);
 
-      // Busca SEMPRE do banco antes de mesclar — garante que obs/pgto estão atualizados
-      el.textContent='⏳ Consultando banco de dados...';
+      // 1. Busca obs/pgto existentes no banco
+      el.textContent='⏳ Consultando banco...';
       const existing={};
       try{
         const dbRows=await SB.get('propostas?select=id_proposta,proposta,observacao,pgto');
@@ -913,42 +911,58 @@ const App = (() => {
             if(k) existing[k]={_obs:p.observacao||'',_pgto:p.pgto||false};
           });
         }
-      }catch(e){ console.warn('Não foi possível buscar banco para merge:',e); }
-      el.textContent='⏳ Processando planilha...';
+      }catch(e){console.warn('Merge warn:',e);}
 
-      // Monta mapa das propostas novas vindas do arquivo
-      const novasMapa={};
+      // 2. Monta mapa do CSV — preserva obs/pgto das existentes
+      el.textContent='⏳ Processando planilha...';
+      const csvMapa={};
       rows.forEach(r=>{
         const row=_normalizeRow(r);
         const k=row.ID_PROPOSTA||row.PROPOSTA;
         if(k){
           if(existing[k]){row._obs=existing[k]._obs;row._pgto=existing[k]._pgto;}
-          novasMapa[k]=_enrichRow(row);
+          csvMapa[k]=_enrichRow(row);
         }
       });
 
-      // Mescla: mantém todas as existentes e sobrescreve/adiciona as do arquivo
-      const base={};
-      propostas.forEach(p=>{const k=p.ID_PROPOSTA||p.PROPOSTA;if(k)base[k]=p;});
-      Object.assign(base, novasMapa);
-      const novas = Object.values(novasMapa).filter(p=>{const k=p.ID_PROPOSTA||p.PROPOSTA;return !existing[k];}).length;
-      const atualizadas = Object.values(novasMapa).filter(p=>{const k=p.ID_PROPOSTA||p.PROPOSTA;return !!existing[k];}).length;
-      propostas=Object.values(base);
-      localStorage.setItem('propostas_data',JSON.stringify(propostas));
-      // Registra horário da última atualização — salva no Supabase para todos verem
+      // 3. Identifica IDs removidos do CSV (estavam no banco, não vieram no CSV)
+      const idsNoCSV=new Set(Object.keys(csvMapa));
+      const idsParaDeletar=Object.keys(existing).filter(k=>!idsNoCSV.has(k));
+
+      // 4. Deleta do banco os que saíram do CSV
+      if(idsParaDeletar.length>0){
+        el.textContent=`⏳ Removendo ${idsParaDeletar.length} proposta(s) antigas...`;
+        for(let i=0;i<idsParaDeletar.length;i+=50){
+          const lote=idsParaDeletar.slice(i,i+50);
+          const filtro=lote.map(k=>`id_proposta=eq.${encodeURIComponent(k)}`).join('&');
+          await fetch(`${SB_URL}/rest/v1/propostas?or=(${lote.map(k=>`id_proposta.eq.${k}`).join(',')})`,{
+            method:'DELETE',
+            headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Prefer':'return=minimal'}
+          });
+        }
+      }
+
+      // 5. Propostas finais = apenas as do CSV, ordenadas da mais nova para a mais antiga
+      const novas=Object.keys(csvMapa).filter(k=>!existing[k]).length;
+      const atualizadas=Object.keys(csvMapa).filter(k=>!!existing[k]).length;
+      propostas=Object.values(csvMapa).sort((a,b)=>{
+        const da=new Date(a.DATA_INCLUSAO||0), db=new Date(b.DATA_INCLUSAO||0);
+        return db-da; // mais nova primeiro
+      });
+
+      // 6. Registra última atualização
       const agora=new Date().toISOString();
       const agoraFmt=new Date().toLocaleDateString('pt-BR')+' às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-      localStorage.setItem('ultima_atualizacao', agoraFmt);
+      localStorage.setItem('ultima_atualizacao',agoraFmt);
       const uaEl=document.getElementById('ultima-atualizacao');
       if(uaEl)uaEl.textContent='🕐 Última atualização: '+agoraFmt;
-      // Persiste no Supabase para qualquer usuário ver
       SB.post('config?on_conflict=chave',[{chave:'ultima_atualizacao',valor:agora,usuario:_user.nome}],'resolution=merge-duplicates,return=minimal').catch(()=>{});
-      el.textContent=`✅ ${propostas.length} total (${novas} novas, ${atualizadas} atualizadas)`;
-      showToast(`✅ ${novas} novas · ${atualizadas} atualizadas · ${propostas.length} total`,'success');
+
+      el.textContent=`✅ ${propostas.length} total (${novas} novas · ${idsParaDeletar.length} removidas)`;
+      showToast(`✅ ${novas} novas · ${atualizadas} atualizadas · ${idsParaDeletar.length} removidas`,'success');
       _refreshSelects(); renderTable();
       await saveToSupabase(true);
-    }catch(err){el.textContent='❌ Erro';showToast('Erro: '+err.message,'error');}
-    document.getElementById('card-propostas').classList.remove('active');
+    }catch(err){el.textContent='❌ Erro: '+err.message;showToast('Erro: '+err.message,'error');console.error(err);}
   }
 
   async function _salvarLojasSupabase(){
@@ -1673,23 +1687,20 @@ const App = (() => {
       return;
     }
 
-    const header=['Nome','Proposta','Data','Status','DN','Loja','Coordenador','Observação','Pagamento'];
+    const header=['Nome','Proposta','Data','Status','DN','Observação','Pagamento'];
     const data=[header,...rows.map(r=>[
       r.VENDEDOR||'',
       r.PROPOSTA||'',
       _fmt(r.DATA_INCLUSAO)||'',
       r.STATUS||'',
       r.DN||'',
-      r.LOJA||'',
-      r.COORDENADOR||'',
       r._obs||'',
       r._pgto?'Pago':'Não pago'
     ])];
 
     const ws=XLSX.utils.aoa_to_sheet(data);
     ws['!cols']=[
-      {wch:22},{wch:14},{wch:16},{wch:12},{wch:10},{wch:32},
-      {wch:22},{wch:30},{wch:12}
+      {wch:22},{wch:14},{wch:16},{wch:12},{wch:10},{wch:30},{wch:12}
     ];
 
     // Destaca o cabeçalho em verde
