@@ -129,6 +129,9 @@ tr.row-obs-lost .obs-select{background:#fee2e2!important;border-color:#fca5a5!im
 tr.row-obs-warn td{background:#fef9c3!important;color:#713f12!important;}
 tr.row-obs-warn td span{color:#713f12!important;}
 tr.row-obs-warn .obs-select{background:#fef9c3!important;border-color:#fde047!important;}
+tr.row-obs-rival td{background:#b91c1c!important;color:#fff!important;}
+tr.row-obs-rival td span{color:#fff!important;}
+tr.row-obs-rival .obs-select{background:#b91c1c!important;border-color:#ef4444!important;color:#fff!important;}
 .btn-pgto{background:none;border:2px solid var(--gray-200);border-radius:8px;padding:5px 9px;cursor:pointer;font-size:15px;transition:all .2s;display:flex;align-items:center;justify-content:center;width:36px;height:32px}
 .btn-pgto:hover{border-color:var(--green-main);background:var(--green-light)}
 .btn-pgto.paid{border-color:#1d4ed8;background:#1d4ed8;color:#fff;}
@@ -1061,7 +1064,7 @@ const App = (() => {
       const badge=r._pgto?`<span class="badge" style="background:#1e3a8a;color:#fff;border-color:#1e3a8a;">💰 Pago</span>`:r.STATUS==='Aprovada'?`<span class="badge badge-approved">✓ Aprovada</span>`:r.STATUS==='Recusada'?`<span class="badge badge-rejected">✕ Recusada</span>`:`<span class="badge badge-included">⏳ Incluída</span>`;
       const obsClass=_obsRowClass(r._obs);
       const finalRc=r._pgto?'row-paid':(obsClass||rc);
-      const OBS_OPTS=['','Perdemos por taxa','Quebra de crédito','Cliente desistiu','Aguard. documento','Negociando'];
+      const OBS_OPTS=['','Perdemos por taxa','Quebra de crédito','Cliente desistiu','Pago no concorrente','Aguard. documento','Negociando'];
       const obsSelect=`<select class="obs-select" data-idx="${idx}" onchange="App.updateObs(this)"><option value="">Selecione...</option>${OBS_OPTS.slice(1).map(o=>`<option value="${o}"${r._obs===o?' selected':''}>${o}</option>`).join('')}</select>`;
       return`<tr class="${finalRc}" id="tr-${idx}"><td class="col-name">${_e(r.VENDEDOR)||'—'}</td><td class="col-proposta">${_e(r.PROPOSTA)||'—'}</td><td class="col-data">${_fmt(r.DATA_INCLUSAO)}</td><td>${badge}</td><td class="col-dn">${_e(r.DN)||'—'}</td><td class="col-loja">${_e(r.LOJA)||(r.DN?`<span style="color:#b0bec5;font-size:11px">DN ${r.DN}</span>`:'—')}</td><td class="col-gcm">${_e(r.GCM)||'—'}</td><td class="col-coord">${_e(r.COORDENADOR)||'—'}</td><td style="min-width:170px">${obsSelect}</td><td><button class="btn-pgto${r._pgto?' paid':''}" data-idx="${idx}" onclick="App.togglePgto(this)">${r._pgto?'💰':'💵'}</button></td></tr>`;
     }).join('');
@@ -1545,9 +1548,11 @@ const App = (() => {
   }
 
   const _OBS_LOST=['Perdemos por taxa','Quebra de crédito','Cliente desistiu'];
+  const _OBS_RIVAL=['Pago no concorrente'];
   const _OBS_WARN=['Aguard. documento','Negociando'];
   function _obsRowClass(obs){
     if(!obs)return'';
+    if(_OBS_RIVAL.includes(obs))return'row-obs-rival';
     if(_OBS_LOST.includes(obs))return'row-obs-lost';
     if(_OBS_WARN.includes(obs))return'row-obs-warn';
     return'';
